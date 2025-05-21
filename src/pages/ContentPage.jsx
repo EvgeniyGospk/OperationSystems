@@ -1,12 +1,11 @@
 // src/pages/ContentPage.jsx
 import React, { useEffect } from "react";
-import { Link, useLocation, useNavigate } from "react-router-dom";
-import { osData } from "../data/osData"; // Импортируем ТОЛЬКО osData
+import { Link, useLocation, useNavigate } from "react-router-dom"; // Link здесь нужен
+import { osData } from "../data/osData";
 import ContentRenderer from "../components/ContentRenderer";
 
-// Вспомогательная функция для рекурсивного поиска элемента по пути
 const findItemRecursive = (items, path) => {
-  if (!items) return null; // Добавим проверку на случай пустых items
+  if (!items) return null;
   for (const item of items) {
     if (item.path === path) {
       return item;
@@ -21,21 +20,17 @@ const findItemRecursive = (items, path) => {
   return null;
 };
 
-// Вспомогательная функция для построения хлебных крошек
 const getBreadcrumbs = (dataToSearch, currentPath) => {
   const crumbs = [{ title: "Главная", path: "/" }];
   if (currentPath === "/" || !dataToSearch) {
-    // Добавим проверку на dataToSearch
     return crumbs;
   }
-
   const pathSegments = currentPath.split("/").filter(Boolean);
   let accumulatedPath = "";
   let currentLevelData = dataToSearch;
-
   for (const segment of pathSegments) {
     accumulatedPath += `/${segment}`;
-    if (!currentLevelData) break; // Прерываем, если нет данных для поиска
+    if (!currentLevelData) break;
     const foundItem = currentLevelData.find(
       (item) => item.path === accumulatedPath
     );
@@ -52,7 +47,6 @@ const getBreadcrumbs = (dataToSearch, currentPath) => {
 const ContentPage = () => {
   const location = useLocation();
   const navigate = useNavigate();
-
   const currentItem = findItemRecursive(osData, location.pathname);
 
   useEffect(() => {
@@ -76,6 +70,8 @@ const ContentPage = () => {
   let contentToRender = null;
   const breadcrumbs = getBreadcrumbs(osData, location.pathname);
 
+  const cleanTitle = (title) => title.replace(/^(\d+\.[\d.]*\s*)/, "");
+
   if (currentItem && currentItem.content) {
     pageTitle = currentItem.title;
     contentToRender = currentItem.content;
@@ -86,19 +82,31 @@ const ContentPage = () => {
     currentItem.subsections.length > 0
   ) {
     pageTitle = currentItem.title;
-    // ПРЯМОЕ СОЗДАНИЕ ОБЪЕКТА
     contentToRender = [
       {
         type: "paragraph",
-        text: `Это обзорный раздел для "<strong>${currentItem.title.replace(
-          /^(\d+\.[\d.]*\s*)/,
-          ""
+        text: `Это обзорный раздел для "<strong>${cleanTitle(
+          currentItem.title
         )}</strong>". Выберите подраздел для изучения.`,
       },
     ];
+    // Опционально: редирект на первый подраздел, если контента нет
+    useEffect(() => {
+      if (
+        currentItem &&
+        !currentItem.content &&
+        currentItem.subsections &&
+        currentItem.subsections.length > 0 &&
+        currentItem.subsections[0].path
+      ) {
+        if (location.pathname === currentItem.path) {
+          // Только если мы на странице самого раздела-контейнера
+          navigate(currentItem.subsections[0].path, { replace: true });
+        }
+      }
+    }, [location.pathname, currentItem, navigate]);
   } else if (location.pathname === "/") {
     pageTitle = "Добро пожаловать!";
-    // ИСПРАВЛЕНИЕ ЗДЕСЬ: ПРЯМОЕ СОЗДАНИЕ ОБЪЕКТА
     contentToRender = [
       {
         type: "paragraph",
@@ -107,13 +115,8 @@ const ContentPage = () => {
     ];
   }
 
-  // Убираем нумерацию из заголовка страницы и хлебных крошек
-  const cleanTitle = (title) => title.replace(/^(\d+\.[\d.]*\s*)/, "");
-
   return (
     <div className="bg-white dark:bg-neutral-800/70 shadow-xl rounded-xl p-6 md:py-8 md:px-10 ring-1 ring-inset ring-neutral-200 dark:ring-neutral-700/50 min-h-[calc(100vh-10rem)]">
-      {" "}
-      {/* Добавил min-height */}
       {breadcrumbs && breadcrumbs.length > 1 && (
         <nav
           aria-label="breadcrumb"
@@ -122,8 +125,6 @@ const ContentPage = () => {
           <ol className="list-none p-0 inline-flex flex-wrap gap-x-1">
             {breadcrumbs.map((crumb, index) => (
               <li key={crumb.path + index} className="flex items-center">
-                {" "}
-                {/* Улучшил key */}
                 {index > 0 && (
                   <span className="mx-1 text-neutral-400 dark:text-neutral-500">
                     /
@@ -134,7 +135,7 @@ const ContentPage = () => {
                     {cleanTitle(crumb.title)}
                   </span>
                 ) : (
-                  <Link
+                  <Link // Link используется здесь
                     to={crumb.path}
                     className="hover:underline text-neutral-600 dark:text-neutral-400 hover:text-[--color-accent] dark:hover:text-[--color-accent-dark]"
                   >
@@ -146,9 +147,11 @@ const ContentPage = () => {
           </ol>
         </nav>
       )}
+
       <h1 className="!text-3xl md:!text-4xl font-extrabold mb-8 !border-b-2 !border-[--color-accent] dark:!border-[--color-accent-dark] pb-4 !text-neutral-900 dark:!text-neutral-100">
         {cleanTitle(pageTitle)}
       </h1>
+
       {contentToRender && contentToRender.length > 0 ? (
         <ContentRenderer content={contentToRender} />
       ) : (
@@ -160,11 +163,11 @@ const ContentPage = () => {
             Содержимое для <code>{location.pathname}</code> не найдено или еще
             не добавлено.
           </p>
-          <Link
+          <Link // Link используется здесь
             to="/"
             className="mt-8 inline-block px-6 py-3 bg-[--color-accent] text-white rounded-lg hover:bg-[--color-accent-hover] dark:bg-[--color-accent-dark] dark:hover:bg-sky-500 transition-colors font-semibold shadow-md"
           >
-            На главную
+            На главную (к первому разделу)
           </Link>
         </div>
       )}
