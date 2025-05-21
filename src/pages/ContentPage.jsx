@@ -1,54 +1,50 @@
 // src/pages/ContentPage.jsx
 import React, { useEffect } from "react";
-import { useParams, Link, useLocation, useNavigate } from "react-router-dom";
-import { osData } from "../data/osData";
+import { Link, useLocation, useNavigate } from "react-router-dom";
+import { osData } from "../data/osData"; // Импортируем ТОЛЬКО osData
 import ContentRenderer from "../components/ContentRenderer";
 
+// Вспомогательная функция для рекурсивного поиска элемента по пути
 const findItemRecursive = (items, path) => {
   for (const item of items) {
-    if (item.path === path) return item;
+    if (item.path === path) {
+      return item;
+    }
     if (item.subsections) {
-      const found = findItemRecursive(item.subsections, path);
-      if (found) return found;
+      const foundInChildren = findItemRecursive(item.subsections, path);
+      if (foundInChildren) {
+        return foundInChildren;
+      }
     }
   }
   return null;
 };
 
-const getBreadcrumbs = (items, currentPath) => {
+// Вспомогательная функция для построения хлебных крошек
+const getBreadcrumbs = (dataToSearch, currentPath) => {
   const crumbs = [{ title: "Главная", path: "/" }];
-  if (currentPath === "/") return crumbs;
+  if (currentPath === "/") {
+    return crumbs;
+  }
 
-  const pathParts = currentPath.split("/").filter(Boolean);
-  let builtPath = "";
+  const pathSegments = currentPath.split("/").filter(Boolean); // ['introduction', 'concepts']
+  let accumulatedPath = "";
+  let currentLevelData = dataToSearch;
 
-  function findCrumbs(currentItems, currentIndex) {
-    if (currentIndex >= pathParts.length) return;
-
-    builtPath += "/" + pathParts[currentIndex];
-    const item = currentItems.find(
-      (i) => i.path === builtPath || i.id === pathParts[currentIndex]
-    ); // Проверка по id для первого уровня
-
-    if (item) {
-      crumbs.push({ title: item.title, path: item.path });
-      if (item.subsections) {
-        findCrumbs(item.subsections, currentIndex + 1);
-      }
+  for (const segment of pathSegments) {
+    accumulatedPath += `/${segment}`;
+    const foundItem = currentLevelData.find(
+      (item) => item.path === accumulatedPath
+    );
+    if (foundItem) {
+      crumbs.push({ title: foundItem.title, path: foundItem.path });
+      currentLevelData = foundItem.subsections || [];
     } else {
-      // Если не нашли по полному пути, ищем по последней части ID (для подразделов)
-      constfallbackItem = currentItems.find((i) =>
-        i.id.endsWith(pathParts[currentIndex])
-      );
-      if (fallbackItem) {
-        crumbs.push({ title: fallbackItem.title, path: fallbackItem.path });
-        if (fallbackItem.subsections) {
-          findCrumbs(fallbackItem.subsections, currentIndex + 1);
-        }
-      }
+      // Если не нашли по полному пути, это может быть конечный элемент без подразделов
+      // или ошибка в пути/данных. Для простоты, прерываем здесь.
+      break;
     }
   }
-  findCrumbs(items, 0);
   return crumbs;
 };
 
@@ -59,94 +55,118 @@ const ContentPage = () => {
   const currentItem = findItemRecursive(osData, location.pathname);
 
   useEffect(() => {
-    // Если это главный путь "/", но в osData для него нет контента,
-    // и есть первый раздел, редиректим на первый раздел.
-    if (
-      location.pathname === "/" &&
-      (!currentItem || !currentItem.content) &&
-      osData.length > 0 &&
-      osData[0].path
-    ) {
-      if (
-        osData[0].subsections &&
-        osData[0].subsections.length > 0 &&
-        osData[0].subsections[0].path
-      ) {
-        navigate(osData[0].subsections[0].path, { replace: true });
-      } else {
-        navigate(osData[0].path, { replace: true });
+    // Редирект с главной страницы на первый доступный раздел/подраздел, если на "/" нет контента
+    if (location.pathname === "/" && (!currentItem || !currentItem.content)) {
+      if (osData && osData.length > 0) {
+        const firstSection = osData[0];
+        if (
+          firstSection.subsections &&
+          firstSection.subsections.length > 0 &&
+          firstSection.subsections[0].path
+        ) {
+          navigate(firstSection.subsections[0].path, { replace: true });
+        } else if (firstSection.path) {
+          navigate(firstSection.path, { replace: true });
+        }
       }
     }
   }, [location.pathname, currentItem, navigate]);
 
   let pageTitle = "Конспект по ОС";
   let contentToRender = null;
-  let breadcrumbs = getBreadcrumbs(osData, location.pathname);
+  const breadcrumbs = getBreadcrumbs(osData, location.pathname);
 
-  if (currentItem) {
+  if (currentItem && currentItem.content) {
     pageTitle = currentItem.title;
     contentToRender = currentItem.content;
+  } else if (
+    currentItem &&
+    !currentItem.content &&
+    currentItem.subsections &&
+    currentItem.subsections.length > 0
+  ) {
+    // Если это раздел-контейнер без собственного контента, но с подразделами,
+    // можно отобразить заглушку или список подразделов.
+    // Или, если есть первый подраздел, можно редиректить на него.
+    // Для простоты пока показываем заглушку.
+    pageTitle = currentItem.title;
+    contentToRender = [
+      {
+        type: "paragraph",
+        text: `Это обзорный раздел для "${currentItem.title}". Выберите подраздел для изучения.`,
+      },
+      // Можно также сгенерировать список ссылок на подразделы:
+      // { type: 'list', items: currentItem.subsections.map(sub => `<a href="${sub.path}">${sub.title.replace(/^(\d+\.\d+\.\s*)/, '')}</a>`) }
+    ];
   } else if (location.pathname === "/") {
-    // Этот блок теперь может быть не нужен из-за редиректа, но оставим на всякий случай
+    // Этот блок скорее всего не будет достигнут из-за редиректа выше,
+    // но оставим как запасной вариант.
     pageTitle = "Добро пожаловать!";
     contentToRender = [
-      createContentItem("paragraph", {
+      {
+        type: "paragraph",
         text: "Выберите раздел для изучения в меню слева. Если вы видите эту страницу, возможно, автоматический переход на первый раздел не сработал.",
-      }),
+      },
     ];
   }
 
-  // Для отладки хлебных крошек
-  // console.log("Current Path:", location.pathname);
-  // console.log("Breadcrumbs:", breadcrumbs);
-
   return (
-    <div className="bg-white dark:bg-neutral-800/50 shadow-xl rounded-xl p-6 md:p-10 ring-1 ring-neutral-200 dark:ring-neutral-700">
-      <nav
-        aria-label="breadcrumb"
-        className="mb-6 text-sm text-neutral-500 dark:text-neutral-400"
-      >
-        <ol className="list-none p-0 inline-flex flex-wrap">
-          {breadcrumbs.map((crumb, index) => (
-            <li key={index} className="flex items-center">
-              {index > 0 && (
-                <span className="mx-2 text-neutral-400 dark:text-neutral-500">
-                  /
-                </span>
-              )}
-              {index === breadcrumbs.length - 1 ? (
-                <span className="text-neutral-700 dark:text-neutral-300 font-semibold">
-                  {crumb.title.replace(/^(\d+\.\s*)/, "")}
-                </span>
-              ) : (
-                <Link
-                  to={crumb.path}
-                  className="hover:underline text-neutral-600 dark:text-neutral-400 hover:text-[--color-accent] dark:hover:text-[--color-accent-dark]"
-                >
-                  {crumb.title.replace(/^(\d+\.\s*)/, "")}
-                </Link>
-              )}
-            </li>
-          ))}
-        </ol>
-      </nav>
+    <div className="bg-white dark:bg-neutral-800/70 shadow-xl rounded-xl p-6 md:py-8 md:px-10 ring-1 ring-inset ring-neutral-200 dark:ring-neutral-700/50">
+      {/* Хлебные крошки */}
+      {breadcrumbs &&
+        breadcrumbs.length > 1 && ( // Показываем крошки, если их больше одной (Главная)
+          <nav
+            aria-label="breadcrumb"
+            className="mb-6 text-sm text-neutral-500 dark:text-neutral-400"
+          >
+            <ol className="list-none p-0 inline-flex flex-wrap gap-x-1">
+              {breadcrumbs.map((crumb, index) => (
+                <li key={index} className="flex items-center">
+                  {index > 0 && (
+                    <span className="mx-1 text-neutral-400 dark:text-neutral-500">
+                      /
+                    </span>
+                  )}
+                  {index === breadcrumbs.length - 1 ? (
+                    <span className="text-neutral-700 dark:text-neutral-300 font-semibold">
+                      {crumb.title.replace(/^(\d+\.[\d.]*\s*)/, "")}
+                    </span>
+                  ) : (
+                    <Link
+                      to={crumb.path}
+                      className="hover:underline text-neutral-600 dark:text-neutral-400 hover:text-[--color-accent] dark:hover:text-[--color-accent-dark]"
+                    >
+                      {crumb.title.replace(/^(\d+\.[\d.]*\s*)/, "")}
+                    </Link>
+                  )}
+                </li>
+              ))}
+            </ol>
+          </nav>
+        )}
 
-      <h1 className="!text-3xl md:!text-4xl font-extrabold mb-8 !border-b-2 !border-blue-500 dark:!border-blue-400 pb-4 !text-neutral-900 dark:!text-neutral-100">
-        {pageTitle}
+      {/* Заголовок страницы */}
+      <h1 className="!text-3xl md:!text-4xl font-extrabold mb-8 !border-b-2 !border-[--color-accent] dark:!border-[--color-accent-dark] pb-4 !text-neutral-900 dark:!text-neutral-100">
+        {pageTitle.replace(/^(\d+\.[\d.]*\s*)/, "")}
       </h1>
-      {contentToRender ? (
+
+      {/* Отображение контента */}
+      {contentToRender && contentToRender.length > 0 ? (
         <ContentRenderer content={contentToRender} />
       ) : (
         <div className="text-center py-10">
-          <h2 className="text-2xl font-semibold mb-4">Раздел в разработке</h2>
+          <h2 className="text-2xl font-semibold mb-4 text-neutral-700 dark:text-neutral-300">
+            Раздел в разработке
+          </h2>
           <p className="text-neutral-600 dark:text-neutral-400">
-            Содержимое для <code>{location.pathname}</code> скоро появится.
+            Содержимое для <code>{location.pathname}</code> скоро появится, или
+            выберите другой раздел.
           </p>
           <Link
             to="/"
-            className="mt-6 inline-block px-6 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition-colors"
+            className="mt-8 inline-block px-6 py-3 bg-[--color-accent] text-white rounded-lg hover:bg-[--color-accent-hover] dark:bg-[--color-accent-dark] dark:hover:bg-sky-500 transition-colors font-semibold shadow-md"
           >
-            На главную
+            На главную (к первому разделу)
           </Link>
         </div>
       )}
